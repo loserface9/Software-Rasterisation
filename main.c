@@ -10,6 +10,7 @@
 
 #define WIN_WIDTH 1920
 #define WIN_HEIGHT 1080
+#define PIXEL_COUNT WIN_HEIGHT*WIN_WIDTH
 #define x_range (3)
 #define y_range (x_range / ((double) WIN_WIDTH / WIN_HEIGHT))
 
@@ -23,18 +24,21 @@ struct Triangle {
 void array3_to_str(char str[], double P[3]);
 void Triangle_to_str(char str[], struct Triangle *triangle);
 void print_array2d(double *A, int rows, int cols);
-void arraysub(double *w, double *u, double *v, int length);
+void arraysub(double *w, const double *u, const double *v, const int length);
 void matinv2(double A[2][2]);
 int matmul(double *C, double *A, double*B, int A_rows, int A_cols, int B_rows, int B_cols);
 int create_rotation_matrix(double rot_mat[3][3], double theta_x, double theta_y, double theta_z);
 void transform_triangle(struct Triangle *restrict triangle, double trans_mat[3][3]);
 void rasterise (
     int *restrict buffer, double *restrict z_buffer,
-    struct Triangle *restrict triangle, double x_positions[WIN_WIDTH], double y_positions[WIN_HEIGHT]
+    const struct Triangle *restrict triangle,
+    const double x_positions[WIN_WIDTH], const double y_positions[WIN_HEIGHT]
 );
 void clear_buffers (int *restrict buffer, double *restrict z_buffer);
 void print_buffer(int *restrict buffer);
 int make_frame(unsigned char *restrict frame, const int *restrict buffer);
+void set_pixel_rgb (unsigned char *restrict pixel, unsigned char r, unsigned char g, unsigned char b);
+void copy_pixel_rgb (unsigned char *restrict destination, const unsigned char *restrict origin);
 void make_bitmap(unsigned char *restrict bitmap, const unsigned char *restrict frame);
 
 
@@ -124,8 +128,8 @@ int main () {
         y_positions[yIdx] = -y_positions[yIdx];
     }
 
-    int *buffer = malloc(WIN_HEIGHT*WIN_WIDTH*sizeof(int));
-    double *z_buffer = malloc(WIN_HEIGHT*WIN_WIDTH*sizeof(double));
+    int *buffer = malloc(PIXEL_COUNT*sizeof(int));
+    double *z_buffer = malloc(PIXEL_COUNT*sizeof(double));
     clear_buffers(buffer, z_buffer);
 
     double rot_mat[3][3];
@@ -156,10 +160,10 @@ int main () {
     //     print_buffer(buffer);
     // }
 
-    unsigned char *frame = calloc(WIN_HEIGHT*WIN_WIDTH*3, sizeof(unsigned char));
+    unsigned char *frame = calloc(PIXEL_COUNT*3, sizeof(unsigned char));
     make_frame(frame, buffer);
     
-    const unsigned long FILE_SIZE = WIN_HEIGHT*WIN_WIDTH*4 + 14 + 40;
+    const unsigned long FILE_SIZE = PIXEL_COUNT*4 + 14 + 40;
     const unsigned long FILE_SIZE_BYTES = FILE_SIZE*sizeof(unsigned char);
     unsigned char *bitmap = calloc(FILE_SIZE, sizeof(unsigned char));
     make_bitmap(bitmap, frame);
@@ -184,7 +188,6 @@ void make_bitmap(unsigned char *restrict bitmap, const unsigned char *restrict f
 
     const unsigned long FILE_HEADER_SIZE = 14, INFO_HEADER_SIZE = 40;
     const unsigned long HEADER_SIZE = FILE_HEADER_SIZE + INFO_HEADER_SIZE;
-    const unsigned long PIXEL_COUNT = WIN_HEIGHT*WIN_WIDTH;
     // const unsigned long FILE_SIZE = PIXEL_COUNT*4 + HEADER_SIZE;
     const unsigned long BYTES_PER_PIXEL = 4*sizeof(unsigned char);
     const unsigned long FILE_SIZE_BYTES = PIXEL_COUNT*BYTES_PER_PIXEL + (HEADER_SIZE)*sizeof(unsigned char);
@@ -193,9 +196,7 @@ void make_bitmap(unsigned char *restrict bitmap, const unsigned char *restrict f
     for (int yIdx = 0; yIdx < WIN_HEIGHT; yIdx++) {
         for (int xIdx = 0; xIdx < WIN_WIDTH; xIdx++) {
             // Calculate the index: row * num_cols + column
-            body[yIdx*WIN_WIDTH*4 + xIdx*4 + 0] = frame[yIdx*WIN_WIDTH*3 + xIdx*3 + 0];
-            body[yIdx*WIN_WIDTH*4 + xIdx*4 + 1] = frame[yIdx*WIN_WIDTH*3 + xIdx*3 + 1];
-            body[yIdx*WIN_WIDTH*4 + xIdx*4 + 2] = frame[yIdx*WIN_WIDTH*3 + xIdx*3 + 2];
+            copy_pixel_rgb(&body[yIdx*WIN_WIDTH*4 + xIdx*4], &frame[yIdx*WIN_WIDTH*3 + xIdx*3]);
             body[yIdx*WIN_WIDTH*4 + xIdx*4 + 3] = 0;
         }
     }
@@ -239,9 +240,9 @@ void make_bitmap(unsigned char *restrict bitmap, const unsigned char *restrict f
     infoheader[12] = (unsigned char)(1);
     infoheader[14] = (unsigned char)(BYTES_PER_PIXEL*8);
 
-    memcpy(bitmap, fileheader, FILE_HEADER_SIZE*sizeof(unsigned char));
+    memcpy(bitmap,                    fileheader, FILE_HEADER_SIZE*sizeof(unsigned char));
     memcpy(&bitmap[FILE_HEADER_SIZE], infoheader, INFO_HEADER_SIZE*sizeof(unsigned char));
-    memcpy(&bitmap[HEADER_SIZE], (char *)body, PIXEL_COUNT*BYTES_PER_PIXEL);
+    memcpy(&bitmap[HEADER_SIZE],      body,       PIXEL_COUNT*BYTES_PER_PIXEL);
     free(body);
 }
 
@@ -250,54 +251,56 @@ int make_frame(unsigned char *restrict frame, const int *restrict buffer) {
 // *buffer  - int [WIN_HEIGHT][WIN_WIDTH]
 // *frame   - unsigned char [WIN_HEIGHT][WIN_WIDTH][3]
 
+    int row_start_idx;
     for (int yIdx = 0; yIdx < WIN_HEIGHT; yIdx++) {
+        row_start_idx = yIdx*WIN_WIDTH*3;
         for (int xIdx = 0; xIdx < WIN_WIDTH; xIdx++) {
             if (buffer[yIdx*WIN_WIDTH + xIdx] > 0) {
                 switch (buffer[yIdx*WIN_WIDTH + xIdx]) {
                     case 2: // R
-                        frame[yIdx*WIN_WIDTH*3 + xIdx*3 + 0] = 255;
-                        frame[yIdx*WIN_WIDTH*3 + xIdx*3 + 1] = 0;
-                        frame[yIdx*WIN_WIDTH*3 + xIdx*3 + 2] = 0;
+                        set_pixel_rgb(&frame[row_start_idx + xIdx*3], 255, 0, 0);
                         break;
                     case 3: // G
-                        frame[yIdx*WIN_WIDTH*3 + xIdx*3 + 0] = 0;
-                        frame[yIdx*WIN_WIDTH*3 + xIdx*3 + 1] = 255;
-                        frame[yIdx*WIN_WIDTH*3 + xIdx*3 + 2] = 0;
+                        set_pixel_rgb(&frame[row_start_idx + xIdx*3], 0, 255, 0);
                         break;
                     case 4: // Y
-                        frame[yIdx*WIN_WIDTH*3 + xIdx*3 + 0] = 255;
-                        frame[yIdx*WIN_WIDTH*3 + xIdx*3 + 1] = 255;
-                        frame[yIdx*WIN_WIDTH*3 + xIdx*3 + 2] = 0;
+                        set_pixel_rgb(&frame[row_start_idx + xIdx*3], 255, 255, 0);
                         break;
                     case 5: // B
-                        frame[yIdx*WIN_WIDTH*3 + xIdx*3 + 0] = 0;
-                        frame[yIdx*WIN_WIDTH*3 + xIdx*3 + 1] = 0;
-                        frame[yIdx*WIN_WIDTH*3 + xIdx*3 + 2] = 255;
+                        set_pixel_rgb(&frame[row_start_idx + xIdx*3], 0, 0, 255);
                         break;
                     case 6: // M
-                        frame[yIdx*WIN_WIDTH*3 + xIdx*3 + 0] = 255;
-                        frame[yIdx*WIN_WIDTH*3 + xIdx*3 + 1] = 0;
-                        frame[yIdx*WIN_WIDTH*3 + xIdx*3 + 2] = 255;
+                        set_pixel_rgb(&frame[row_start_idx + xIdx*3], 255, 0, 255);
                         break;
                     case 7: // C
-                        frame[yIdx*WIN_WIDTH*3 + xIdx*3 + 0] = 0;
-                        frame[yIdx*WIN_WIDTH*3 + xIdx*3 + 1] = 255;
-                        frame[yIdx*WIN_WIDTH*3 + xIdx*3 + 2] = 255;
+                        set_pixel_rgb(&frame[row_start_idx + xIdx*3], 0, 255, 255);
                         break;
                     case 1: case 8: // W
-                        frame[yIdx*WIN_WIDTH*3 + xIdx*3 + 0] = 255;
-                        frame[yIdx*WIN_WIDTH*3 + xIdx*3 + 1] = 255;
-                        frame[yIdx*WIN_WIDTH*3 + xIdx*3 + 2] = 255;
+                        set_pixel_rgb(&frame[row_start_idx + xIdx*3], 255, 255, 255);
                         break;
                 }
             } else {
-                frame[yIdx*WIN_WIDTH*3 + xIdx*3 + 0] = 0;
-                frame[yIdx*WIN_WIDTH*3 + xIdx*3 + 1] = 0;
-                frame[yIdx*WIN_WIDTH*3 + xIdx*3 + 2] = 0;
+                set_pixel_rgb(&frame[row_start_idx + xIdx*3], 0, 0, 0);
             }
         }
     }
     return 0;
+}
+
+
+inline void set_pixel_rgb (unsigned char *restrict pixel, unsigned char r, unsigned char g, unsigned char b) {
+    pixel[0] = r;
+    pixel[1] = g;
+    pixel[2] = b;
+}
+
+
+inline void copy_pixel_rgb (unsigned char *restrict destination, const unsigned char *restrict origin) {
+// Do not let destination and origin overlap
+
+    destination[0] = origin[0];
+    destination[1] = origin[1];
+    destination[2] = origin[2];
 }
 
 
@@ -344,23 +347,19 @@ void clear_buffers (int *restrict buffer, double *restrict z_buffer) {
 
 void rasterise (
     int *restrict buffer, double *restrict z_buffer,
-    struct Triangle *restrict triangle, double x_positions[WIN_WIDTH], double y_positions[WIN_HEIGHT]
+    const struct Triangle *restrict triangle,
+    const double x_positions[WIN_WIDTH], const double y_positions[WIN_HEIGHT]
 ) {
 // *buffer    - int [WIN_HEIGHT][WIN_WIDTH]
 // *z_buffer  - double [WIN_HEIGHT][WIN_WIDTH]
 
-    double A[2] = {triangle->A[0], triangle->A[1]};
-    double B[2] = {triangle->B[0], triangle->B[1]};
-    double C[2] = {triangle->C[0], triangle->C[1]};
-    double AB[2], AC[2], AB_3d[3], AC_3d[3];
-    arraysub(AB, B, A, 2);
-    arraysub(AC, C, A, 2);
-    arraysub(AB_3d, triangle->B, triangle->A, 3);
-    arraysub(AC_3d, triangle->C, triangle->A, 3);
+    double AB[3], AC[3];
+    arraysub(AB, triangle->B, triangle->A, 3);
+    arraysub(AC, triangle->C, triangle->A, 3);
     double n[3] = {
-        AB_3d[1]*AC_3d[2] - AB_3d[2]*AC_3d[1],
-        AB_3d[2]*AC_3d[0] - AB_3d[0]*AC_3d[2],
-        AB_3d[0]*AC_3d[1] - AB_3d[1]*AC_3d[0]
+        AB[1]*AC[2] - AB[2]*AC[1],
+        AB[2]*AC[0] - AB[0]*AC[2],
+        AB[0]*AC[1] - AB[1]*AC[0]
     };
     // z = (n[0](A[0] - x) + n[1](A[1] - y))/n[2] + A[2]
 
@@ -373,8 +372,7 @@ void rasterise (
     for (int yIdx = 0; yIdx < WIN_HEIGHT; yIdx++) {
         for (int xIdx = 0; xIdx < WIN_WIDTH; xIdx++) {
             double P[2] = {x_positions[xIdx], y_positions[yIdx]};
-            double AP[2];
-            arraysub(AP, P, A, 2);
+            double AP[2] = {P[0] - triangle->A[0], P[1] - triangle->A[1]};
 
             double bary[2];
             matmul(bary, (double *)ABAC_inv, AP, 2, 2, 2, 1);
@@ -439,7 +437,7 @@ void transform_triangle(struct Triangle *restrict triangle, double trans_mat[3][
 }
 
 
-void arraysub (double *w, double *u, double *v, int length) {
+void arraysub (double *w, const double *u, const double *v, const int length) {
     // Assigns w = u - v
     for (int i = 0; i < length; i++) {
         w[i] = u[i] - v[i];

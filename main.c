@@ -1,16 +1,17 @@
 #include "matrices.h"
 #include "make_frame.h"
-#include "bitmap.h"
+#include "SDL.h"
 #include "constants.h"
 
-#include <SDL3/SDL_stdinc.h>
+#include <SDL3/SDL.h>
+#include <SDL3/SDL_render.h>
+#include <SDL3/SDL_video.h>
 #include <float.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdbool.h>
 #include <math.h>
 #include <stdlib.h>
-#include <time.h>
 
 
 struct Triangle {
@@ -120,48 +121,45 @@ int main () {
     clear_buffers(buffer, z_buffer);
 
     double rot_mat[3][3];
-    // create_rotation_matrix_3d(rot_mat, -M_PI/(12*16), M_PI/(12*8), 0);
-    create_rotation_matrix_3d(rot_mat, -M_PI/(6), M_PI/(3), 0);
+    create_rotation_matrix_3d(rot_mat, -M_PI/(12*16), M_PI/(12*8), 0);
+    // create_rotation_matrix_3d(rot_mat, -M_PI/(6), M_PI/(3), 0);
 
-    for (int i = 0; i < 12; i++) {
-        transform_triangle(triangles[i], rot_mat);
-    }
 
-    for (int i = 0; i < 12; i++) {
-        rasterise(buffer, z_buffer, triangles[i], x_positions, y_positions);
-    }
-
-    // struct timespec wait_time = {0, 16*1000000};
-    // int i;
-    // while (false) {
-    //     clear_buffers(buffer, z_buffer);
-    //     for (i = 0; i < 12; i++) {
-    //         transform_triangle(triangles[i], rot_mat);
-    //     }
-    //     for (i = 0; i < 12; i++) {
-    //         rasterise(buffer, z_buffer, triangles[i], x_positions, y_positions);
-    //     }
-
-    //     nanosleep(&wait_time, NULL);
-    //     system("clear");
-    //     output_buffer_as_ascii(buffer);
-    // }
+    SDL_Window *window;
+    SDL_Renderer *renderer;
+    SDL_Surface *window_surface;
+    int e = initialise_SDL_video(&window, &window_surface, &renderer, "Software Rasteriser", WIN_WIDTH, WIN_HEIGHT);
+    if (e != 0) {return -1;}
 
     unsigned char *frame = calloc(PIXEL_COUNT*3, sizeof(unsigned char));
-    make_frame(frame, buffer);
+    SDL_Surface *surface = SDL_CreateSurfaceFrom(WIN_WIDTH, WIN_HEIGHT, SDL_PIXELFORMAT_RGB24, frame, WIN_WIDTH*sizeof(unsigned char)*3);
 
-    const unsigned long FILE_SIZE = PIXEL_COUNT*4 + 14 + 40;
-    const unsigned long FILE_SIZE_BYTES = FILE_SIZE*sizeof(unsigned char);
-    unsigned char *bitmap = calloc(FILE_SIZE, sizeof(unsigned char));
-    make_bitmap(bitmap, frame, WIN_HEIGHT, WIN_WIDTH);
+    int i;
+    int nreps = 0;
+    while (nreps < 1000) {
+        nreps++;
+        clear_buffers(buffer, z_buffer);
+        for (i = 0; i < 12; i++) {
+            transform_triangle(triangles[i], rot_mat);
+        }
+        for (i = 0; i < 12; i++) {
+            rasterise(buffer, z_buffer, triangles[i], x_positions, y_positions);
+        }
 
-    char filename[] = "bitmap.bmp";
-    FILE *fp = fopen(filename, "w");
-    fwrite(bitmap, FILE_SIZE_BYTES, 1, fp);
-    fclose(fp);
+        make_frame(frame, buffer);
+
+        // SDL_Delay(16);
+
+        SDL_BlitSurface(surface, NULL, window_surface, NULL);
+        SDL_UpdateWindowSurface(window);
+    }
+
+    SDL_DestroyRenderer(renderer);
+    SDL_DestroyWindow(window);
+    SDL_DestroySurface(surface);
+    SDL_Quit();
 
     free(frame);
-    free(bitmap);
 
     return 0;
 }

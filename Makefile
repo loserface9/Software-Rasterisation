@@ -1,26 +1,28 @@
 CC = gcc
-CFLAGS = -Wall -Wextra -pedantic
+CFLAGS = -Wall -Wextra -pedantic -O3
 CLIBFLAGS = -lm `pkg-config --cflags --libs sdl3`
 
-BPATH = ./build
+SRC = .
+OBJ = ./obj
+SRCS = $(wildcard $(SRC)/*.c)
+OBJS = $(patsubst $(SRC)/%.c, $(OBJ)/%.o, $(SRCS))
+HDRS = $(wildcard $(SRC)/*.h)
 
-objects = $(BPATH)/main.o $(BPATH)/matrices.o $(BPATH)/make_frame.o $(BPATH)/SDL.o $(BPATH)/bitmap.o $(BPATH)/ascii_rendering.o
+all: $(OBJ)/outRelease $(OBJ)
 
-all: $(BPATH) $(BPATH)/outRelease ./constants.h
-
-$(BPATH)/outRelease: $(objects)
-	$(CC) $(CFLAGS) $(CLIBFLAGS) $(objects) -o $(BPATH)/outRelease
+$(OBJ)/outRelease: $(OBJS)
+	$(CC) $(CFLAGS) $(CLIBFLAGS) $(OBJS) -o $(OBJ)/outRelease
 
 # Syntax - targets ...: target-pattern: prereq-patterns ...
 # In the case of the first target, foo.o, the target-pattern matches foo.o and sets the "stem" to be "foo".
 # It then replaces the '%' in prereq-patterns with that stem
-$(objects): $(BPATH)/%.o: %.c
-	$(CC) -c $(CFLAGS) $(CLIBFLAGS) $^ -o $@
-# ./build/main.o: ./main.c
-# 	$(CC) -c $(CFLAGS) $(CLIBFLAGS) main.c -o ./build/main.o
+$(OBJS): $(OBJ)/%.o: %.c $(OBJ) $(SRC)/constants.h
+	$(CC) -c $(CFLAGS) $(CLIBFLAGS) $< -o $@
+# ./obj/main.o: ./main.c
+# 	$(CC) -c $(CFLAGS) $(CLIBFLAGS) main.c -o ./obj/main.o
 
-./build:
-	mkdir build
+$(OBJ):
+	mkdir $(OBJ)
 
 clean:
-	rm -rf ./build
+	rm -r $(OBJ)

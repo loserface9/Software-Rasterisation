@@ -6,7 +6,7 @@
 #include "bitmap.h"
 
 
-void make_bitmap(unsigned char *restrict bitmap, const unsigned char *restrict frame, const int WIN_HEIGHT, const int WIN_WIDTH) {
+void make_bitmap(unsigned char *restrict bitmap, const unsigned char *restrict frame, const int WIN_WIDTH, const int WIN_HEIGHT) {
 // *bitmap  - unsigned char [WIN_HEIGHT*WIN_WIDTH*4 + 54]
 // *frame   - unsigned char [WIN_HEIGHT][WIN_WIDTH][3]
 

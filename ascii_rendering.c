@@ -1,10 +1,9 @@
 #include "ascii_rendering.h"
-#include "constants.h"
 
 #include <stdio.h>
 
 
-void output_buffer_as_ascii(int *restrict buffer) {
+void output_buffer_as_ascii(int *restrict buffer, const int WIN_WIDTH, const int WIN_HEIGHT) {
 // *buffer  - [WIN_HEIGHT][WIN_WIDTH]
 
     for (int yIdx = 0; yIdx < WIN_HEIGHT; yIdx++) {

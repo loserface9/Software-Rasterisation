@@ -20,6 +20,11 @@ struct Triangle {
 };
 
 
+const int PIXEL_COUNT = WIN_WIDTH*WIN_HEIGHT;
+const double x_range = 3;
+const double y_range = x_range / ((double) WIN_WIDTH / WIN_HEIGHT);
+
+
 void Triangle_to_str(char str[], struct Triangle *triangle);
 void transform_triangle(struct Triangle *restrict triangle, double trans_mat[3][3]);
 void rasterise (
@@ -131,7 +136,7 @@ int main () {
     int e = initialise_SDL_video(&window, &window_surface, &renderer, "Software Rasteriser", WIN_WIDTH, WIN_HEIGHT);
     if (e != 0) {return -1;}
 
-    unsigned char *frame = calloc(PIXEL_COUNT*3, sizeof(unsigned char));
+    unsigned char *frame = malloc(PIXEL_COUNT*3 * sizeof(unsigned char));
     SDL_Surface *surface = SDL_CreateSurfaceFrom(WIN_WIDTH, WIN_HEIGHT, SDL_PIXELFORMAT_RGB24, frame, WIN_WIDTH*sizeof(unsigned char)*3);
 
     int i;
@@ -146,7 +151,7 @@ int main () {
             rasterise(buffer, z_buffer, triangles[i], x_positions, y_positions);
         }
 
-        make_frame(frame, buffer);
+        make_frame(frame, buffer, WIN_WIDTH, WIN_HEIGHT);
 
         // SDL_Delay(16);
 

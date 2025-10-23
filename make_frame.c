@@ -1,8 +1,6 @@
-#include "constants.h"
-
 #include "make_frame.h"
 
-int make_frame(unsigned char *restrict frame, const int *restrict buffer) {
+int make_frame(unsigned char *restrict frame, const int *restrict buffer, const int WIN_WIDTH, const int WIN_HEIGHT) {
 // *buffer  - int [WIN_HEIGHT][WIN_WIDTH]
 // *frame   - unsigned char [WIN_HEIGHT][WIN_WIDTH][3]
 

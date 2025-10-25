@@ -27,6 +27,7 @@ const double y_range = x_range / ((double) WIN_WIDTH / WIN_HEIGHT);
 
 void Triangle_to_str(char str[], struct Triangle *triangle);
 void transform_triangle(struct Triangle *triangle, const Mat3 *trans_mat);
+void organise_triangle(struct Triangle *triangle);
 void rasterise (
     int *restrict buffer, double *restrict z_buffer,
     const struct Triangle *restrict triangle,
@@ -146,6 +147,7 @@ int main () {
         clear_buffers(buffer, z_buffer);
         for (i = 0; i < 12; i++) {
             transform_triangle(triangles[i], &rot_mat);
+            organise_triangle(triangles[i]);
         }
         for (i = 0; i < 12; i++) {
             rasterise(buffer, z_buffer, triangles[i], x_positions, y_positions);
@@ -248,6 +250,66 @@ void transform_triangle(struct Triangle *restrict triangle, const Mat3 *trans_ma
         {triangle_mat_curr[0][2], triangle_mat_curr[1][2], triangle_mat_curr[2][2]},
         triangle->color
     };
+}
+
+
+void organise_triangle(struct Triangle *triangle) {
+    Vec3 (*const A_ptr) = &triangle->A;
+    Vec3 (*const B_ptr) = &triangle->B;
+    Vec3 (*const C_ptr) = &triangle->C;
+
+    const Vec3 *newOrder[3] = {A_ptr, B_ptr, C_ptr};
+    for (int j = 2; j > 0; j--) {
+        for (int i = 0; i < j; i++) {
+            if (newOrder[i][1] < newOrder[i+1][1]) {
+                // If y of this element is less than the y of the following element, swap the elements
+                const Vec3 *temp = newOrder[i+1];
+                newOrder[i+1] = newOrder[i];
+                newOrder[i] = temp;
+            }
+        }
+    }
+
+    int num_diff = (A_ptr != newOrder[0]) + (B_ptr != newOrder[1]) + (C_ptr != newOrder[2]);
+
+    if (num_diff == 0) {
+        // Swap nothing
+        return;
+    }
+
+    if (num_diff == 3) {
+        // Swap everything
+        const Vec3 newA_copy = {(*newOrder[0])[0], (*newOrder[0])[1], (*newOrder[0])[2]};
+        const Vec3 newB_copy = {(*newOrder[1])[0], (*newOrder[1])[1], (*newOrder[1])[2]};
+
+        Vec3_copy(A_ptr, &newA_copy);
+        Vec3_copy(B_ptr, &newB_copy);
+        Vec3_copy(C_ptr, newOrder[2]);
+        return;
+    }
+
+    // Swap two things, leave the third the same
+    if (A_ptr != newOrder[0]) {
+        // Swap A with something TBD
+        const Vec3 newA_copy = {(*newOrder[0])[0], (*newOrder[0])[1], (*newOrder[0])[2]};
+
+        if (B_ptr != newOrder[1]) {
+            // Swap A with B. newA is B, newB is A.
+            Vec3_copy(B_ptr, A_ptr);
+            Vec3_copy(A_ptr, &newA_copy);
+        } else {
+            // Swap A with C. newA is C, newC is A.
+            Vec3_copy(C_ptr, A_ptr);
+            Vec3_copy(A_ptr, &newA_copy);
+        }
+    } else {
+        // Swap B with C
+        // newB_copy is a copy of C
+        const Vec3 newB_copy = {(*C_ptr)[0], (*C_ptr)[1], (*C_ptr)[2]};
+        Vec3_copy(C_ptr, B_ptr);
+        Vec3_copy(B_ptr, &newB_copy);
+    }
+
 }
 
 

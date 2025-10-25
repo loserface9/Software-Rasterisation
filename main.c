@@ -15,7 +15,7 @@
 
 
 struct Triangle {
-    double A[3], B[3], C[3];
+    Vec3 A, B, C;
     int color;
 };
 
@@ -26,7 +26,7 @@ const double y_range = x_range / ((double) WIN_WIDTH / WIN_HEIGHT);
 
 
 void Triangle_to_str(char str[], struct Triangle *triangle);
-void transform_triangle(struct Triangle *restrict triangle, double trans_mat[3][3]);
+void transform_triangle(struct Triangle *triangle, const Mat3 *trans_mat);
 void rasterise (
     int *restrict buffer, double *restrict z_buffer,
     const struct Triangle *restrict triangle,
@@ -125,8 +125,8 @@ int main () {
     double *z_buffer = malloc(PIXEL_COUNT*sizeof(double));
     clear_buffers(buffer, z_buffer);
 
-    double rot_mat[3][3];
-    create_rotation_matrix_3d(rot_mat, -M_PI/(12*16), M_PI/(12*8), 0);
+    Mat3 rot_mat;
+    create_rotation_matrix_3d(&rot_mat, -M_PI/(12*16), M_PI/(12*8), 0);
     // create_rotation_matrix_3d(rot_mat, -M_PI/(6), M_PI/(3), 0);
 
 
@@ -145,7 +145,7 @@ int main () {
         nreps++;
         clear_buffers(buffer, z_buffer);
         for (i = 0; i < 12; i++) {
-            transform_triangle(triangles[i], rot_mat);
+            transform_triangle(triangles[i], &rot_mat);
         }
         for (i = 0; i < 12; i++) {
             rasterise(buffer, z_buffer, triangles[i], x_positions, y_positions);
@@ -192,29 +192,29 @@ void rasterise (
 // *buffer    - int [WIN_HEIGHT][WIN_WIDTH]
 // *z_buffer  - double [WIN_HEIGHT][WIN_WIDTH]
 
-    double AB[3], AC[3];
+    Vec3 AB, AC;
     arraysub(AB, triangle->B, triangle->A, 3);
     arraysub(AC, triangle->C, triangle->A, 3);
-    double n[3] = {
+    Vec3 n = {
         AB[1]*AC[2] - AB[2]*AC[1],
         AB[2]*AC[0] - AB[0]*AC[2],
         AB[0]*AC[1] - AB[1]*AC[0]
     };
     // z = (n[0](A[0] - x) + n[1](A[1] - y))/n[2] + A[2]
 
-    double ABAC_inv[2][2] = {
+    Mat2 ABAC_inv = {
         {AB[0], AC[0]},
         {AB[1], AC[1]}
     };
-    matinv2(ABAC_inv);
+    Mat2_inv(&ABAC_inv);
 
     for (int yIdx = 0; yIdx < WIN_HEIGHT; yIdx++) {
         for (int xIdx = 0; xIdx < WIN_WIDTH; xIdx++) {
-            double P[2] = {x_positions[xIdx], y_positions[yIdx]};
-            double AP[2] = {P[0] - triangle->A[0], P[1] - triangle->A[1]};
+            Vec2 P = {x_positions[xIdx], y_positions[yIdx]};
+            Vec2 AP = {P[0] - triangle->A[0], P[1] - triangle->A[1]};
 
-            double bary[2];
-            matmul(bary, (double *)ABAC_inv, AP, 2, 2, 2, 1);
+            Vec2 bary;
+            matmul(bary, (double *)&ABAC_inv, AP, 2, 2, 2, 1);
 
             bool in_triangle = (
                 ((1 > bary[0]) && (0 < bary[0])) &&
@@ -234,14 +234,14 @@ void rasterise (
 }
 
 
-void transform_triangle(struct Triangle *restrict triangle, double trans_mat[3][3]) {
-    double triangle_mat_prev[3][3] = {
+void transform_triangle(struct Triangle *restrict triangle, const Mat3 *trans_mat) {
+    Mat3 triangle_mat_prev = {
         {triangle->A[0], triangle->B[0], triangle->C[0]},
         {triangle->A[1], triangle->B[1], triangle->C[1]},
         {triangle->A[2], triangle->B[2], triangle->C[2]}
     };
-    double triangle_mat_curr[3][3];
-    matmul((double *)triangle_mat_curr, (double *)trans_mat, (double *)triangle_mat_prev, 3, 3, 3, 3);
+    Mat3 triangle_mat_curr;
+    matmul((double *)&triangle_mat_curr, (double *)trans_mat, (double *)&triangle_mat_prev, 3, 3, 3, 3);
     *triangle = (struct Triangle) {
         {triangle_mat_curr[0][0], triangle_mat_curr[1][0], triangle_mat_curr[2][0]},
         {triangle_mat_curr[0][1], triangle_mat_curr[1][1], triangle_mat_curr[2][1]},
@@ -253,9 +253,9 @@ void transform_triangle(struct Triangle *restrict triangle, double trans_mat[3][
 
 void Triangle_to_str (char str[], struct Triangle *triangle) {
     // str should be preallocated length 50*3*3
-    array3_to_str(str, triangle->A);
-    array3_to_str(&str[50*3], triangle->B);
-    array3_to_str(&str[50*3*2], triangle->C);
+    Vec3_to_str(str, &triangle->A);
+    Vec3_to_str(&str[50*3], &triangle->B);
+    Vec3_to_str(&str[50*3*2], &triangle->C);
 
     char str_1[50*3], str_2[50*3], str_3[50*3];
     for (int i = 0; i < 50*3; i++) {

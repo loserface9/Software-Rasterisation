@@ -254,21 +254,57 @@ void transform_triangle(struct Triangle *restrict triangle, const Mat3 *trans_ma
 
 
 void organise_triangle(struct Triangle *triangle) {
+// Sort the points of a triangle to progress clockwise, with A the highest point
     Vec3 (*const A_ptr) = &triangle->A;
     Vec3 (*const B_ptr) = &triangle->B;
     Vec3 (*const C_ptr) = &triangle->C;
 
-    const Vec3 *newOrder[3] = {A_ptr, B_ptr, C_ptr};
-    for (int j = 2; j > 0; j--) {
-        for (int i = 0; i < j; i++) {
-            if (newOrder[i][1] < newOrder[i+1][1]) {
-                // If y of this element is less than the y of the following element, swap the elements
-                const Vec3 *temp = newOrder[i+1];
-                newOrder[i+1] = newOrder[i];
-                newOrder[i] = temp;
-            }
-        }
+    // Step 1, make new A the highest point
+    double max_y = triangle->A[1];
+    Vec3 *max_y_point = A_ptr;
+    if (triangle->B[1] > max_y) {
+        max_y = triangle->B[1];
+        max_y_point = B_ptr;
     }
+    if (triangle->C[1] > max_y) {
+        max_y = triangle->C[1];
+        max_y_point = C_ptr;
+    }
+
+    Vec3 *newOrder[3];
+    if (max_y_point == A_ptr) {
+        newOrder[0] = A_ptr;
+        newOrder[1] = B_ptr, newOrder[2] = C_ptr;
+    } else if (max_y_point == B_ptr) {
+        newOrder[0] = B_ptr;
+        newOrder[1] = A_ptr, newOrder[2] = C_ptr;
+    } else {
+        newOrder[0] = C_ptr;
+        newOrder[1] = A_ptr, newOrder[2] = B_ptr;
+    }
+
+    // Step 2
+    Vec3 step2_AB, step2_AC;
+    arraysub(step2_AB, *newOrder[1], *newOrder[0], 3);
+    arraysub(step2_AC, *newOrder[2], *newOrder[0], 3);
+
+    double step2_AB_theta = acos(
+        step2_AB[0] / sqrt(
+            step2_AB[0]*step2_AB[0] + step2_AB[1]*step2_AB[1]
+        )
+    );
+    double step2_AC_theta = acos(
+        step2_AC[0] / sqrt(
+            step2_AC[0]*step2_AC[0] + step2_AC[1]*step2_AC[1]
+        )
+    );
+
+    if (step2_AB_theta > step2_AC_theta) {
+        Vec3 *temp = newOrder[1];
+        newOrder[1] = newOrder[2];
+        newOrder[2] = temp;
+    }
+
 
     int num_diff = (A_ptr != newOrder[0]) + (B_ptr != newOrder[1]) + (C_ptr != newOrder[2]);
 
@@ -282,9 +318,9 @@ void organise_triangle(struct Triangle *triangle) {
         const Vec3 newA_copy = {(*newOrder[0])[0], (*newOrder[0])[1], (*newOrder[0])[2]};
         const Vec3 newB_copy = {(*newOrder[1])[0], (*newOrder[1])[1], (*newOrder[1])[2]};
 
+        Vec3_copy(C_ptr, newOrder[2]);
         Vec3_copy(A_ptr, &newA_copy);
         Vec3_copy(B_ptr, &newB_copy);
-        Vec3_copy(C_ptr, newOrder[2]);
         return;
     }
 

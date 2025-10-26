@@ -210,6 +210,9 @@ void rasterise (
     arraysub(AB, triangle->B, triangle->A, 3);
     arraysub(AC, triangle->C, triangle->A, 3);
 
+    double AB_inv_grad_2D = AB[0]/AB[1];
+    double AC_inv_grad_2D = AC[0]/AC[1];
+
     Vec3 n = {
         AB[1]*AC[2] - AB[2]*AC[1],
         AB[2]*AC[0] - AB[0]*AC[2],
@@ -241,27 +244,39 @@ void rasterise (
 
         // x = a_x + k*d_x
         // k = (y - a_y) / d_y
-        // This can be sped up by normalising AB, AC to remove the division
+        // This can be sped up by normalising AB, AC y-val = 1, to remove the division
         double left_x_pos = (
             triangle->A[0] + // a_x
-            AC[0] * ( // d_x
-                (y_pos - triangle->A[1]) / AC[1] // Magnitude in direction of gradient
+            AC_inv_grad_2D * ( // d_x
+                (y_pos - triangle->A[1]) // Magnitude in direction of gradient
             )
         );
         double right_x_pos = (
             triangle->A[0] + // a_x
-            AB[0] * ( // d_x
-                (y_pos - triangle->A[1]) / AB[1] // Magnitude in direction of gradient
+            AB_inv_grad_2D * ( // d_x
+                (y_pos - triangle->A[1]) // Magnitude in direction of gradient
             )
         );
+
+        int starting_x_idx = -1;
         for (int xIdx = 0; xIdx < WIN_WIDTH; xIdx++) {
+            if (x_positions[xIdx] >= left_x_pos) {
+                starting_x_idx = xIdx;
+                break;
+            }
+        }
+        if (starting_x_idx < 0) {break;}
+
+        for (int xIdx = starting_x_idx; xIdx < WIN_WIDTH; xIdx++) {
             double x_pos = x_positions[xIdx];
-            if ((x_pos >= left_x_pos) & (x_pos <= right_x_pos)) {
+            if (x_pos <= right_x_pos) {
                 double P_z = (n[0]*(triangle->A[0] - x_pos) + n[1]*(triangle->A[1] - y_pos)) / n[2] + triangle->A[2];
                 if (P_z > z_buffer[yIdx*WIN_WIDTH + xIdx]){
                     buffer[yIdx*WIN_WIDTH + xIdx] = triangle->color;
                     z_buffer[yIdx*WIN_WIDTH + xIdx] = P_z;
                 }
+            } else {
+                break;
             }
         }
     }
@@ -272,6 +287,8 @@ void rasterise (
     Vec3 low_to_A, low_to_mid;
     arraysub(low_to_A, triangle->A, *lowest_point, 3);
     arraysub(low_to_mid, *middle_point, *lowest_point, 3);
+    double low_to_A_inv_grad_2D = low_to_A[0]/low_to_A[1];
+    double low_to_mid_inv_grad_2D = low_to_mid[0]/low_to_mid[1];
 
     // If middle_point is B, low_to_A is on the left. If middle_point is C, low_to_A is on the right.
     const bool is_low_to_A_on_left = (triangle->B[1] > triangle->C[1]);
@@ -287,17 +304,17 @@ void rasterise (
 
         // x = a_x + k*d_x
         // k = (y - a_y) / d_y
-        // This can be sped up by normalising CB, CA to remove the division
+        // This can be sped up by normalising CA, CB y-val = 1, to remove the division
         double left_x_pos = (
             (*lowest_point)[0] + // Position
-            low_to_A[0] * ( // Gradient
-                (y_pos - (*lowest_point)[1]) / low_to_A[1] // Magnitude in direction of gradient
+            low_to_A_inv_grad_2D * ( // Gradient
+                (y_pos - (*lowest_point)[1]) // Magnitude in direction of gradient
             )
         );
         double right_x_pos = (
             (*lowest_point)[0] + // Position
-            low_to_mid[0] * ( // Gradient
-                (y_pos - (*lowest_point)[1]) / low_to_mid[1] // Magnitude in direction of gradient
+            low_to_mid_inv_grad_2D * ( // Gradient
+                (y_pos - (*lowest_point)[1]) // Magnitude in direction of gradient
             )
         );
         if (!is_low_to_A_on_left) {
@@ -306,14 +323,25 @@ void rasterise (
             right_x_pos = temp;
         }
 
+        int starting_x_idx = -1;
         for (int xIdx = 0; xIdx < WIN_WIDTH; xIdx++) {
+            if (x_positions[xIdx] >= left_x_pos) {
+                starting_x_idx = xIdx;
+                break;
+            }
+        }
+        if (starting_x_idx < 0) {break;}
+
+        for (int xIdx = starting_x_idx; xIdx < WIN_WIDTH; xIdx++) {
             double x_pos = x_positions[xIdx];
-            if ((x_pos >= left_x_pos) & (x_pos <= right_x_pos)) {
+            if (x_pos <= right_x_pos) {
                 double P_z = (n[0]*(triangle->A[0] - x_pos) + n[1]*(triangle->A[1] - y_pos)) / n[2] + triangle->A[2];
                 if (P_z > z_buffer[yIdx*WIN_WIDTH + xIdx]){
                     buffer[yIdx*WIN_WIDTH + xIdx] = triangle->color;
                     z_buffer[yIdx*WIN_WIDTH + xIdx] = P_z;
                 }
+            } else {
+                break;
             }
         }
     }

@@ -142,7 +142,7 @@ int main () {
 
     int i;
     int nreps = 0;
-    while (nreps < 1000) {
+    while (true) {
         nreps++;
         clear_buffers(buffer, z_buffer);
         for (i = 0; i < 12; i++) {
@@ -194,9 +194,22 @@ void rasterise (
 // *buffer    - int [WIN_HEIGHT][WIN_WIDTH]
 // *z_buffer  - double [WIN_HEIGHT][WIN_WIDTH]
 
+    // Find the first row to include the triangle
+    int starting_y_idx = -1;
+    for (int yIdx = 0; yIdx < WIN_HEIGHT; yIdx++) {
+        if (y_positions[yIdx] <=  triangle->A[1]) {
+            // If we have fallen below the highest point of the triangle
+            starting_y_idx = yIdx;
+            break;
+        }
+    }
+
+    if (starting_y_idx < 0) {return;}
+
     Vec3 AB, AC;
     arraysub(AB, triangle->B, triangle->A, 3);
     arraysub(AC, triangle->C, triangle->A, 3);
+
     Vec3 n = {
         AB[1]*AC[2] - AB[2]*AC[1],
         AB[2]*AC[0] - AB[0]*AC[2],
@@ -204,28 +217,99 @@ void rasterise (
     };
     // z = (n[0](A[0] - x) + n[1](A[1] - y))/n[2] + A[2]
 
-    Mat2 ABAC_inv = {
-        {AB[0], AC[0]},
-        {AB[1], AC[1]}
-    };
-    Mat2_inv(&ABAC_inv);
 
-    for (int yIdx = 0; yIdx < WIN_HEIGHT; yIdx++) {
+    const Vec3 *middle_point, *lowest_point;
+    if (triangle->B[1] > triangle->C[1]) {
+        // If B is above of C
+        middle_point = &triangle->B;
+        lowest_point = &triangle->C;
+    } else {
+        // If B is not above of C
+        middle_point = &triangle->C;
+        lowest_point = &triangle->B;
+    }
+
+    int middle_y_idx = -1;
+    // Iterate the first sub-triangle
+    for (int yIdx = starting_y_idx; yIdx < WIN_HEIGHT; yIdx++) {
+        double y_pos = y_positions[yIdx];
+        if (y_positions[yIdx] <= (*middle_point)[1]) {
+            // If we have fallen below the second highest point of the triangle
+            middle_y_idx = yIdx;
+            break;
+        }
+
+        // x = a_x + k*d_x
+        // k = (y - a_y) / d_y
+        // This can be sped up by normalising AB, AC to remove the division
+        double left_x_pos = (
+            triangle->A[0] + // a_x
+            AC[0] * ( // d_x
+                (y_pos - triangle->A[1]) / AC[1] // Magnitude in direction of gradient
+            )
+        );
+        double right_x_pos = (
+            triangle->A[0] + // a_x
+            AB[0] * ( // d_x
+                (y_pos - triangle->A[1]) / AB[1] // Magnitude in direction of gradient
+            )
+        );
         for (int xIdx = 0; xIdx < WIN_WIDTH; xIdx++) {
-            Vec2 P = {x_positions[xIdx], y_positions[yIdx]};
-            Vec2 AP = {P[0] - triangle->A[0], P[1] - triangle->A[1]};
+            double x_pos = x_positions[xIdx];
+            if ((x_pos >= left_x_pos) & (x_pos <= right_x_pos)) {
+                double P_z = (n[0]*(triangle->A[0] - x_pos) + n[1]*(triangle->A[1] - y_pos)) / n[2] + triangle->A[2];
+                if (P_z > z_buffer[yIdx*WIN_WIDTH + xIdx]){
+                    buffer[yIdx*WIN_WIDTH + xIdx] = triangle->color;
+                    z_buffer[yIdx*WIN_WIDTH + xIdx] = P_z;
+                }
+            }
+        }
+    }
 
-            Vec2 bary;
-            matmul(bary, (double *)&ABAC_inv, AP, 2, 2, 2, 1);
+    if (middle_y_idx < 0) {return;}
 
-            bool in_triangle = (
-                ((1 > bary[0]) && (0 < bary[0])) &&
-                ((1 > bary[1]) && (0 < bary[1])) &&
-                ((bary[0] + bary[1]) < 1)
-            );
+    // Vectors from the lowest point to A and the middle point
+    Vec3 low_to_A, low_to_mid;
+    arraysub(low_to_A, triangle->A, *lowest_point, 3);
+    arraysub(low_to_mid, *middle_point, *lowest_point, 3);
 
-            if (in_triangle) {
-                double P_z = (n[0]*(triangle->A[0] - P[0]) + n[1]*(triangle->A[1] - P[1])) / n[2] + triangle->A[2];
+    // If middle_point is B, low_to_A is on the left. If middle_point is C, low_to_A is on the right.
+    const bool is_low_to_A_on_left = (triangle->B[1] > triangle->C[1]);
+
+
+    // Iterate the second sub-triangle
+    for (int yIdx = middle_y_idx; yIdx < WIN_HEIGHT; yIdx++) {
+        double y_pos = y_positions[yIdx];
+        if (y_positions[yIdx] <= (*lowest_point)[1]) {
+            // If we have fallen below the lowest point of the triangle
+            break;
+        }
+
+        // x = a_x + k*d_x
+        // k = (y - a_y) / d_y
+        // This can be sped up by normalising CB, CA to remove the division
+        double left_x_pos = (
+            (*lowest_point)[0] + // Position
+            low_to_A[0] * ( // Gradient
+                (y_pos - (*lowest_point)[1]) / low_to_A[1] // Magnitude in direction of gradient
+            )
+        );
+        double right_x_pos = (
+            (*lowest_point)[0] + // Position
+            low_to_mid[0] * ( // Gradient
+                (y_pos - (*lowest_point)[1]) / low_to_mid[1] // Magnitude in direction of gradient
+            )
+        );
+        if (!is_low_to_A_on_left) {
+            double temp = left_x_pos;
+            left_x_pos = right_x_pos;
+            right_x_pos = temp;
+        }
+
+        for (int xIdx = 0; xIdx < WIN_WIDTH; xIdx++) {
+            double x_pos = x_positions[xIdx];
+            if ((x_pos >= left_x_pos) & (x_pos <= right_x_pos)) {
+                double P_z = (n[0]*(triangle->A[0] - x_pos) + n[1]*(triangle->A[1] - y_pos)) / n[2] + triangle->A[2];
                 if (P_z > z_buffer[yIdx*WIN_WIDTH + xIdx]){
                     buffer[yIdx*WIN_WIDTH + xIdx] = triangle->color;
                     z_buffer[yIdx*WIN_WIDTH + xIdx] = P_z;

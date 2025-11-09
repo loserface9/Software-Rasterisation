@@ -1,6 +1,7 @@
 #include "matrices.h"
 #include "make_frame.h"
 #include "SDL.h"
+#include "obj.h"
 #include "constants.h"
 
 #include <SDL3/SDL.h>
@@ -38,80 +39,20 @@ void clear_buffers (int *restrict buffer, double *restrict z_buffer);
 
 
 int main () {
-    struct Triangle t_1 = {
-        {-1, -1, -1},
-        {1, -1, -1},
-        {1, 1, -1},
-        2
-    };
-    struct Triangle t_2 = {
-        {-1, -1, -1},
-        {-1, 1, -1},
-        {1, 1, -1},
-        2
-    };
-    struct Triangle t_3 = {
-        {-1, -1, -1},
-        {-1, 1, -1},
-        {-1, 1, 1},
-        3
-    };
-    struct Triangle t_4 = {
-        {-1, -1, -1},
-        {-1, -1, 1},
-        {-1, 1, 1},
-        3
-    };
-    struct Triangle t_5 = {
-        {-1, -1, -1},
-        {-1, -1, 1},
-        {1, -1, 1},
-        4
-    };
-    struct Triangle t_6 = {
-        {-1, -1, -1},
-        {1, -1, -1},
-        {1, -1, 1},
-        4
-    };
-    struct Triangle t_7 = {
-        {1, 1, -1},
-        {1, -1, -1},
-        {1, -1, 1},
-        5
-    };
-    struct Triangle t_8 = {
-        {1, 1, -1},
-        {1, 1, 1},
-        {1, -1, 1},
-        5
-    };
-    struct Triangle t_9 = {
-        {1, 1, -1},
-        {1, 1, 1},
-        {-1, 1, 1},
-        6
-    };
-    struct Triangle t_10 = {
-        {1, 1, -1},
-        {-1, 1, -1},
-        {-1, 1, 1},
-        6
-    };
-    struct Triangle t_11 = {
-        {-1, -1, 1},
-        {1, 1, 1},
-        {-1, 1, 1},
-        7
-    };
-    struct Triangle t_12 = {
-        {-1, -1, 1},
-        {1, 1, 1},
-        {1, -1, 1},
-        7
-    };
+    Obj object = import_obj("./Assets/mew.obj");
 
-    struct Triangle *triangles[12] = {&t_1, &t_2, &t_3, &t_4, &t_5, &t_6, &t_7, &t_8, &t_9, &t_10, &t_11, &t_12};
+    struct Triangle *triangles[object.num_f];
+    for (int tri_idx = 0; tri_idx < object.num_f; tri_idx++) {
+        const ObjFace *curr_face_ptr = &object.faces[tri_idx];
+        struct Triangle *t = malloc(sizeof(struct Triangle));
+        for (int dim = 0; dim < 3; dim++) {
+            t->A[dim] = object.vertices[ curr_face_ptr->vertices[0] ] [dim];
+            t->B[dim] = object.vertices[ curr_face_ptr->vertices[1] ] [dim];
+            t->C[dim] = object.vertices[ curr_face_ptr->vertices[2] ] [dim];
+        }
+        t->color = 1;
+        triangles[tri_idx] = t;
+    }
 
     double x_positions[WIN_WIDTH];
     for (int xIdx = 0; xIdx < WIN_WIDTH; xIdx++) {
@@ -146,11 +87,11 @@ int main () {
     while (true) {
         nreps++;
         clear_buffers(buffer, z_buffer);
-        for (i = 0; i < 12; i++) {
+        for (i = 0; i < object.num_f; i++) {
             transform_triangle(triangles[i], &rot_mat);
             organise_triangle(triangles[i]);
         }
-        for (i = 0; i < 12; i++) {
+        for (i = 0; i < object.num_f; i++) {
             rasterise(buffer, z_buffer, triangles[i], x_positions, y_positions);
         }
 

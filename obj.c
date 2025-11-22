@@ -11,33 +11,25 @@ struct import_obj_Arena {
     FILE *fptr;
     bool free_fptr;
 };
+struct Instruction_Counts {
+    int num_v, num_vt, num_vn, num_f;
+};
 struct fline_Output {
     char *contents;
     bool end_of_file;
 };
 
-
-const ObjFace ObjFace_NULL = {NULL, NULL, NULL, -1};
-const Obj Obj_NULL = {NULL, NULL, NULL, NULL, -1, -1, -1, -1};
-
-
 static struct fline_Output get_fline(FILE *stream);
+static struct Instruction_Counts get_instruction_counts (FILE *fptr);
 static int string_to_Vec3 (Vec3 *restrict output, const char *restrict string);
-static int string_to_ObjFace (ObjFace *restrict output, const char *restrict string);
+static int string_to_Face (Face *output, const char *restrict string, const Obj *object);
+
+const Face Face_NULL = {NULL, NULL, NULL, -1};
+const Obj Obj_NULL = {NULL, NULL, NULL, NULL, -1, -1, -1, -1};
 
 
 Obj import_obj (const char *filepath) {
     struct import_obj_Arena import_obj_arena = {NULL, false};
-    const int initial_num_v = 100, initial_num_vt = 100, initial_num_vn = 100, initial_num_f = 100;
-    int v_buffer_len = initial_num_v, vt_buffer_len = initial_num_v,
-        vn_buffer_len = initial_num_v, f_buffer_len = initial_num_f;
-    Obj object = {
-        malloc(initial_num_v * sizeof(Vec3)),
-        malloc(initial_num_vt * sizeof(Vec3)),
-        malloc(initial_num_vn * sizeof(Vec3)),
-        malloc(initial_num_f * sizeof(ObjFace)),
-        0, 0, 0, 0
-    };
 
     FILE *fptr = fopen(filepath, "r");
     if (fptr == NULL) {
@@ -46,6 +38,20 @@ Obj import_obj (const char *filepath) {
     }
     import_obj_arena.fptr = fptr;
     import_obj_arena.free_fptr = true;
+
+    const struct Instruction_Counts instruction_counts = get_instruction_counts(fptr);
+
+    fclose(import_obj_arena.fptr);
+    fptr = fopen(filepath, "r");
+    import_obj_arena.fptr = fptr;
+
+    Obj object = {
+        malloc(instruction_counts.num_v * sizeof(Vec3)),
+        malloc(instruction_counts.num_vt * sizeof(Vec3)),
+        malloc(instruction_counts.num_vn * sizeof(Vec3)),
+        malloc(instruction_counts.num_f * sizeof(Face)),
+        0, 0, 0, 0
+    };
 
     struct fline_Output curr_fline_output = get_fline(fptr);
     while (!curr_fline_output.end_of_file) {
@@ -76,47 +82,23 @@ Obj import_obj (const char *filepath) {
 
         if ((instruction[0] == 'v') & (instruction[1] == '\0')) {
             // Vertex
-            // Check whether to increase the size of the buffer
-            if (object.num_v == v_buffer_len) {
-                v_buffer_len += initial_num_v;
-                object.vertices = realloc(object.vertices, v_buffer_len * sizeof(Vec3));
-            }
-
             Vec3 *vertex_ptr = &object.vertices[object.num_v];
             string_to_Vec3(vertex_ptr, curr_line);
             object.num_v++;
         } else if ((instruction[0] == 'v') & (instruction[1] == 't') & (instruction[2] == '\0')) {
             // Vertex texture
-            // Check whether to increase the size of the buffer
-            if (object.num_vt == vt_buffer_len) {
-                vt_buffer_len += initial_num_vt;
-                object.vertex_textures = realloc(object.vertex_textures, vt_buffer_len * sizeof(Vec3));
-            }
-
             Vec3 *vertex_texture_ptr = &object.vertex_textures[object.num_vt];
             string_to_Vec3(vertex_texture_ptr, curr_line);
             object.num_vt++;
         } else if ((instruction[0] == 'v') & (instruction[1] == 'n') & (instruction[2] == '\0')) {
             // Vertex normal
-            // Check whether to increase the size of the buffer
-            if (object.num_vn == vn_buffer_len) {
-                vn_buffer_len += initial_num_vn;
-                object.vertex_normals = realloc(object.vertex_normals, vn_buffer_len * sizeof(Vec3));
-            }
-
             Vec3 *vertex_normal_ptr = &object.vertex_normals[object.num_vn];
             string_to_Vec3(vertex_normal_ptr, curr_line);
             object.num_vn++;
         } else if ((instruction[0] == 'f') & (instruction[1] == '\0')) {
             // Face
-            // Check whether to increase the size of the buffer
-            if (object.num_f == f_buffer_len) {
-                f_buffer_len += initial_num_f;
-                object.faces = realloc(object.faces, f_buffer_len * sizeof(ObjFace));
-            }
-
-            ObjFace *face_ptr = &object.faces[object.num_f];
-            string_to_ObjFace(face_ptr, curr_line);
+            Face *face_ptr = &object.faces[object.num_f];
+            string_to_Face(face_ptr, curr_line, &object);
             object.num_f++;
         }
 
@@ -174,6 +156,44 @@ static struct fline_Output get_fline(FILE *stream) {
 }
 
 
+static struct Instruction_Counts get_instruction_counts (FILE *fptr) {
+    struct Instruction_Counts output = {0, 0, 0, 0};
+
+    struct fline_Output curr_fline_output = get_fline(fptr);
+    while (!curr_fline_output.end_of_file) {
+        const char *curr_line = curr_fline_output.contents;
+        const int curr_line_len = strlen(curr_line);
+
+        // instruction is normally a string like "v" or "vn" or "f"
+        const int instruction_str_len = curr_line_len;
+        char instruction[instruction_str_len];
+
+        for (int i = 0; i < instruction_str_len; i++) instruction[i] = '\0';
+
+        int instruction_str_idx = 0;
+        while ((curr_line[instruction_str_idx] != ' ') & (curr_line[instruction_str_idx] != '\0')) {
+            instruction[instruction_str_idx] = curr_line[instruction_str_idx];
+            instruction_str_idx++;
+        }
+
+        if ((instruction[0] == 'v') & (instruction[1] == '\0')) {
+            output.num_v++;
+        } else if ((instruction[0] == 'v') & (instruction[1] == 't') & (instruction[2] == '\0')) {
+            output.num_vt++;
+        } else if ((instruction[0] == 'v') & (instruction[1] == 'n') & (instruction[2] == '\0')) {
+            output.num_vn++;
+        } else if ((instruction[0] == 'f') & (instruction[1] == '\0')) {
+            output.num_f++;
+        }
+
+        free(curr_fline_output.contents);
+        curr_fline_output = get_fline(fptr);
+    }
+
+    return output;
+}
+
+
 static int string_to_Vec3 (Vec3 *restrict output, const char *restrict string) {
 // string should initially point to the first float, or whitespace before the first float
 
@@ -226,7 +246,7 @@ static int string_to_Vec3 (Vec3 *restrict output, const char *restrict string) {
 }
 
 
-static int string_to_ObjFace (ObjFace *restrict output, const char *restrict string) {
+static int string_to_Face (Face *output, const char *restrict string, const Obj *object) {
 // string should initially point to the first number, or whitespace before the first number
 
     int slash_count = 0;
@@ -234,53 +254,58 @@ static int string_to_ObjFace (ObjFace *restrict output, const char *restrict str
         slash_count += string[i] == '/';
     }
     const int num_vertices = slash_count / 2;
-    output->vertices        = calloc(num_vertices, sizeof(int));
-    output->vertex_textures = calloc(num_vertices, sizeof(int));
-    output->vertex_normals  = calloc(num_vertices, sizeof(int));
+    output->vertices        = malloc(num_vertices * sizeof(Vec3 *));
+    output->vertex_textures = malloc(num_vertices * sizeof(Vec3 *));
+    output->vertex_normals  = malloc(num_vertices * sizeof(Vec3 *));
     output->num_vertices    = num_vertices;
 
-    const char *curr_vertex = string;
+    const char *curr_vertex_str = string;
     for (int vertex_idx = 0; vertex_idx < num_vertices; vertex_idx++) {
-        while (curr_vertex[0] == ' ') curr_vertex++;
+        while (curr_vertex_str[0] == ' ') curr_vertex_str++;
 
-        const int slash_1_pos = strcspn(curr_vertex,                   "/");
-        const int slash_2_pos = strcspn(curr_vertex + slash_1_pos + 1, "/") + slash_1_pos + 1;
-        const int space_pos   = strcspn(curr_vertex,                   " ");
+        const int slash_1_pos = strcspn(curr_vertex_str,                   "/");
+        const int slash_2_pos = strcspn(curr_vertex_str + slash_1_pos + 1, "/") + slash_1_pos + 1;
+        const int space_pos   = strcspn(curr_vertex_str,                   " ");
         const int v_len  = slash_1_pos,
                   vt_len = slash_2_pos - slash_1_pos - 1,
                   vn_len = space_pos - slash_2_pos - 1;
 
 
+        int v_num = 0, vt_num = 0, vn_num = 0;
         // Add digits for vertices
         for (int v_idx = 0; v_idx < v_len; v_idx++) {
-            const char digit = curr_vertex[v_idx];
+            const char digit = curr_vertex_str[v_idx];
             const double power = (v_len - 1) - v_idx;
             const double mul = pow(10, power);
-            output->vertices[vertex_idx] += (digit - '0') * mul;
+            v_num += (digit - '0') * mul;
         }
+
         // Add digits for vertex textures
-        if (vt_len == 0) output->vertex_textures[vertex_idx] = -1;
         for (int vt_idx = 0; vt_idx < vt_len; vt_idx++) {
-            const char digit = curr_vertex[slash_1_pos + 1 + vt_idx];
+            const char digit = curr_vertex_str[slash_1_pos + 1 + vt_idx];
             const double power = (vt_len - 1) - vt_idx;
             const double mul = pow(10, power);
-            output->vertex_textures[vertex_idx] += (digit - '0') * mul;
+            vt_num += (digit - '0') * mul;
         }
         // Add digits for vertex normals
-        if (vn_len == 0) output->vertex_normals[vertex_idx] = -1;
         for (int vn_idx = 0; vn_idx < vn_len; vn_idx++) {
-            const char digit = curr_vertex[slash_2_pos + 1 + vn_idx];
+            const char digit = curr_vertex_str[slash_2_pos + 1 + vn_idx];
             const double power = (vn_len - 1) - vn_idx;
             const double mul = pow(10, power);
-            output->vertex_normals[vertex_idx] += (digit - '0') * mul;
+            vn_num += (digit - '0') * mul;
         }
 
         // Remove 1 from each to give zero-indexing
-        output->vertices[vertex_idx]        -= 1;
-        output->vertex_textures[vertex_idx] -= 1;
-        output->vertex_normals[vertex_idx]  -= 1;
+        v_num -= 1; vt_num -= 1; vn_num -= 1;
 
-        curr_vertex += space_pos + 1;
+        // Assigned the vertex pointer
+                         output->vertices[vertex_idx]        = &(object->vertices[v_num]);
+        if (vt_len == 0) output->vertex_textures[vertex_idx] = NULL;
+        else             output->vertex_textures[vertex_idx] = &(object->vertex_textures[vt_num]);
+        if (vn_len == 0) output->vertex_normals[vertex_idx]  = NULL;
+        else             output->vertex_normals[vertex_idx]  = &(object->vertex_normals[vn_num]);
+
+        curr_vertex_str += space_pos + 1;
     }
 
     return 0;

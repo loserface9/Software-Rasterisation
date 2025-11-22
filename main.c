@@ -42,16 +42,16 @@ int main () {
     Obj object = import_obj("./Assets/mew.obj");
 
     struct Triangle *triangles[object.num_f];
-    for (int tri_idx = 0; tri_idx < object.num_f; tri_idx++) {
-        const ObjFace *curr_face_ptr = &object.faces[tri_idx];
+    for (int face_idx = 0; face_idx < object.num_f; face_idx++) {
+        const Face *face_ptr = &object.faces[face_idx];
         struct Triangle *t = malloc(sizeof(struct Triangle));
         for (int dim = 0; dim < 3; dim++) {
-            t->A[dim] = object.vertices[ curr_face_ptr->vertices[0] ] [dim];
-            t->B[dim] = object.vertices[ curr_face_ptr->vertices[1] ] [dim];
-            t->C[dim] = object.vertices[ curr_face_ptr->vertices[2] ] [dim];
+            t->A[dim] = (*(face_ptr->vertices[0]))[dim];
+            t->B[dim] = (*(face_ptr->vertices[1]))[dim];
+            t->C[dim] = (*(face_ptr->vertices[2]))[dim];
         }
         t->color = 1;
-        triangles[tri_idx] = t;
+        triangles[face_idx] = t;
     }
 
     double x_positions[WIN_WIDTH];

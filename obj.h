@@ -4,20 +4,21 @@
 #include <stdlib.h>
 #include "matrices.h"
 
-typedef struct ObjFace {
-    int *vertices;
-    int *vertex_textures;
-    int *vertex_normals;
+typedef struct Face {
+    // Array of pointers to Vec3s
+    const Vec3 **vertices;
+    const Vec3 **vertex_textures;
+    const Vec3 **vertex_normals;
     int num_vertices;
-} ObjFace;
+} Face;
 
-extern const ObjFace ObjFace_NULL;
+extern const Face ObjFace_NULL;
 
 typedef struct Obj {
     Vec3 *vertices;
     Vec3 *vertex_textures;
     Vec3 *vertex_normals;
-    ObjFace *faces;
+    Face *faces;
     int num_v, num_vt, num_vn, num_f;
 } Obj;
 

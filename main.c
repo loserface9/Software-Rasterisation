@@ -28,7 +28,9 @@ const double y_range = x_range / ((double) WIN_WIDTH / WIN_HEIGHT);
 
 
 void Triangle_to_str(char str[], struct Triangle *triangle);
+struct Triangle *Face_to_Triangles(const Face *face);
 void transform_triangle(struct Triangle *triangle, const Mat3 *trans_mat);
+void transform_obj(Obj *object, const Mat3 *trans_mat);
 void organise_triangle(struct Triangle *triangle);
 void rasterise (
     int *restrict buffer, double *restrict z_buffer,
@@ -40,19 +42,6 @@ void clear_buffers (int *restrict buffer, double *restrict z_buffer);
 
 int main () {
     Obj object = import_obj("./Assets/mew.obj");
-
-    struct Triangle *triangles[object.num_f];
-    for (int face_idx = 0; face_idx < object.num_f; face_idx++) {
-        const Face *face_ptr = &object.faces[face_idx];
-        struct Triangle *t = malloc(sizeof(struct Triangle));
-        for (int dim = 0; dim < 3; dim++) {
-            t->A[dim] = (*(face_ptr->vertices[0]))[dim];
-            t->B[dim] = (*(face_ptr->vertices[1]))[dim];
-            t->C[dim] = (*(face_ptr->vertices[2]))[dim];
-        }
-        t->color = 1;
-        triangles[face_idx] = t;
-    }
 
     double x_positions[WIN_WIDTH];
     for (int xIdx = 0; xIdx < WIN_WIDTH; xIdx++) {
@@ -82,17 +71,22 @@ int main () {
     unsigned char *frame = malloc(PIXEL_COUNT*3 * sizeof(unsigned char));
     SDL_Surface *surface = SDL_CreateSurfaceFrom(WIN_WIDTH, WIN_HEIGHT, SDL_PIXELFORMAT_RGB24, frame, WIN_WIDTH*sizeof(unsigned char)*3);
 
-    int i;
     int nreps = 0;
     while (true) {
         nreps++;
         clear_buffers(buffer, z_buffer);
-        for (i = 0; i < object.num_f; i++) {
-            transform_triangle(triangles[i], &rot_mat);
-            organise_triangle(triangles[i]);
-        }
-        for (i = 0; i < object.num_f; i++) {
-            rasterise(buffer, z_buffer, triangles[i], x_positions, y_positions);
+        transform_obj(&object, &rot_mat);
+
+        for (int face_idx = 0; face_idx < object.num_f; face_idx++) {
+            const Face *face_ptr = &object.faces[face_idx];
+            const int num_triangles = face_ptr->num_vertices - 2;
+            struct Triangle *triangles = Face_to_Triangles(face_ptr);
+
+            for (int tri_idx = 0; tri_idx < num_triangles; tri_idx++) {
+                rasterise(buffer, z_buffer, &triangles[tri_idx], x_positions, y_positions);
+            }
+
+            free(triangles);
         }
 
         make_frame(frame, buffer, WIN_WIDTH, WIN_HEIGHT);
@@ -302,6 +296,25 @@ void rasterise (
 }
 
 
+struct Triangle *Face_to_Triangles(const Face *face) {
+    const int num_triangles = face->num_vertices - 2;
+    struct Triangle *triangles = malloc(num_triangles * sizeof(struct Triangle));
+
+    for (int tri_idx = 0; tri_idx < num_triangles; tri_idx++) {
+        struct Triangle *t = &triangles[tri_idx];
+        for (int dim = 0; dim < 3; dim++) {
+            t->A[dim] = (*(face->vertices[0]))[dim];
+            t->B[dim] = (*(face->vertices[tri_idx+1]))[dim];
+            t->C[dim] = (*(face->vertices[tri_idx+2]))[dim];
+        }
+        t->color = 1;
+        organise_triangle(t);
+    }
+
+    return triangles;
+}
+
+
 void transform_triangle(struct Triangle *restrict triangle, const Mat3 *trans_mat) {
     Mat3 triangle_mat_prev = {
         {triangle->A[0], triangle->B[0], triangle->C[0]},
@@ -316,6 +329,22 @@ void transform_triangle(struct Triangle *restrict triangle, const Mat3 *trans_ma
         {triangle_mat_curr[0][2], triangle_mat_curr[1][2], triangle_mat_curr[2][2]},
         triangle->color
     };
+}
+
+
+void transform_obj(Obj *object, const Mat3 *trans_mat) {
+    for (int v_idx = 0; v_idx < object->num_v; v_idx++) {
+        Vec3 matmul_buffer;
+        matmul(
+            (double *)&matmul_buffer,
+            (double *)trans_mat, (double *)(&object->vertices[v_idx]),
+            3, 3, 3, 1
+        );
+
+        for (int dim = 0; dim < 3; dim++) {
+            (object->vertices[v_idx])[dim] = matmul_buffer[dim];
+        }
+    }
 }
 
 

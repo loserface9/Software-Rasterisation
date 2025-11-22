@@ -4,6 +4,7 @@
 #include "constants.h"
 
 #include <SDL3/SDL.h>
+#include <SDL3/SDL_events.h>
 #include <SDL3/SDL_render.h>
 #include <SDL3/SDL_video.h>
 #include <float.h>
@@ -159,7 +160,19 @@ int main () {
 
         SDL_BlitSurface(surface, NULL, window_surface, NULL);
         SDL_UpdateWindowSurface(window);
+
+        // Handle keyboardinturrupt
+        SDL_Event event;
+        while (SDL_PollEvent(&event)) {
+            switch(event.type) {
+                case SDL_EVENT_QUIT:
+                    goto exit_main_loop;
+            }
+        }
     }
+
+
+    exit_main_loop:
 
     SDL_DestroyRenderer(renderer);
     SDL_DestroyWindow(window);

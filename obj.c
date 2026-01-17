@@ -7,10 +7,6 @@
 #include "obj.h"
 
 
-struct import_obj_Arena {
-    bool free_object;
-    bool free_fptr;
-};
 struct Instruction_Counts {
     int num_v, num_vt, num_vn, num_f;
 };
@@ -30,7 +26,11 @@ const Obj Obj_NULL = {NULL, NULL, NULL, NULL, -1, -1, -1, -1};
 
 
 Obj import_obj (const char *filepath) {
-    struct import_obj_Arena import_obj_arena = {false, false};
+    struct Requires_Deallocation {
+        bool object;
+        bool fptr;
+    };
+    struct Requires_Deallocation requires_deallocation = {false, false};
 
     const struct Instruction_Counts instruction_counts = get_instruction_counts(filepath);
     if (instruction_counts.num_v < 0) goto error;
@@ -40,7 +40,7 @@ Obj import_obj (const char *filepath) {
         printf("file obj.c, function import_obj():\n\tFailed to open file.\n");
         goto error;
     }
-    import_obj_arena.free_fptr = true;
+    requires_deallocation.fptr = true;
 
     Obj object = {
         malloc(instruction_counts.num_v * sizeof(Vec3)),
@@ -49,7 +49,7 @@ Obj import_obj (const char *filepath) {
         malloc(instruction_counts.num_f * sizeof(Face)),
         0, 0, 0, 0
     };
-    import_obj_arena.free_object = true;
+    requires_deallocation.object = true;
 
     struct fline_Output curr_fline_output = get_fline(fptr);
     while (!curr_fline_output.end_of_file) {
@@ -91,12 +91,12 @@ Obj import_obj (const char *filepath) {
     }
     free(curr_fline_output.contents);
 
-    if (import_obj_arena.free_fptr) fclose(fptr);
+    if (requires_deallocation.fptr) fclose(fptr);
     return object;
 
     error:
-        if (import_obj_arena.free_fptr) fclose(fptr);
-        if (import_obj_arena.free_object) Obj_free(&object);
+        if (requires_deallocation.fptr) fclose(fptr);
+        if (requires_deallocation.object) Obj_free(&object);
         object = Obj_NULL;
         return object;
 }

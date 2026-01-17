@@ -26,5 +26,7 @@ extern const Obj Obj_NULL;
 
 
 Obj import_obj (const char *filepath);
+void Obj_free (Obj *object);
+void Face_free (Face *face);
 
 #endif

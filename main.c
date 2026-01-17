@@ -42,6 +42,7 @@ void clear_buffers (int *restrict buffer, double *restrict z_buffer);
 
 int main () {
     Obj object = import_obj("./Assets/mew.obj");
+    if (object.num_v < 0) return -1;
 
     double x_positions[WIN_WIDTH];
     for (int xIdx = 0; xIdx < WIN_WIDTH; xIdx++) {

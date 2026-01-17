@@ -8,7 +8,7 @@
 
 
 struct import_obj_Arena {
-    FILE *fptr;
+    bool free_object;
     bool free_fptr;
 };
 struct Instruction_Counts {
@@ -20,7 +20,8 @@ struct fline_Output {
 };
 
 static struct fline_Output get_fline(FILE *stream);
-static struct Instruction_Counts get_instruction_counts (FILE *fptr);
+static struct Instruction_Counts get_instruction_counts (const char *filepath);
+static void get_instruction_from_line (char *restrict out, const char *restrict line, const int line_len);
 static int string_to_Vec3 (Vec3 *restrict output, const char *restrict string);
 static int string_to_Face (Face *output, const char *restrict string, const Obj *object);
 
@@ -29,21 +30,17 @@ const Obj Obj_NULL = {NULL, NULL, NULL, NULL, -1, -1, -1, -1};
 
 
 Obj import_obj (const char *filepath) {
-    struct import_obj_Arena import_obj_arena = {NULL, false};
+    struct import_obj_Arena import_obj_arena = {false, false};
+
+    const struct Instruction_Counts instruction_counts = get_instruction_counts(filepath);
+    if (instruction_counts.num_v < 0) goto error;
 
     FILE *fptr = fopen(filepath, "r");
     if (fptr == NULL) {
         printf("file obj.c, function import_obj():\n\tFailed to open file.\n");
         goto error;
     }
-    import_obj_arena.fptr = fptr;
     import_obj_arena.free_fptr = true;
-
-    const struct Instruction_Counts instruction_counts = get_instruction_counts(fptr);
-
-    fclose(import_obj_arena.fptr);
-    fptr = fopen(filepath, "r");
-    import_obj_arena.fptr = fptr;
 
     Obj object = {
         malloc(instruction_counts.num_v * sizeof(Vec3)),
@@ -52,6 +49,7 @@ Obj import_obj (const char *filepath) {
         malloc(instruction_counts.num_f * sizeof(Face)),
         0, 0, 0, 0
     };
+    import_obj_arena.free_object = true;
 
     struct fline_Output curr_fline_output = get_fline(fptr);
     while (!curr_fline_output.end_of_file) {
@@ -59,26 +57,12 @@ Obj import_obj (const char *filepath) {
         const int curr_line_len = strlen(curr_line);
 
         // instruction is normally a string like "v" or "vn" or "f"
-        const int instruction_str_len = curr_line_len;
-        char instruction[instruction_str_len];
-
-        if (curr_line_len < 3) goto iterate_lines_cleanup;
-
-        for (int i = 0; i < instruction_str_len; i++) instruction[i] = '\0';
-
-        int instruction_str_idx = 0;
-        while ((curr_line[instruction_str_idx] != ' ') & (curr_line[instruction_str_idx] != '\0')) {
-            if (instruction_str_idx == (instruction_str_len-1)) {
-                printf("file obj.c, function import_obj():\n\tOverflow in instruction buffer.\n");
-                goto error;
-            }
-
-            instruction[instruction_str_idx] = curr_line[instruction_str_idx];
-            instruction_str_idx++;
-        }
+        char instruction[curr_line_len];
+        get_instruction_from_line(instruction, curr_line, curr_line_len);
+        const int instruction_str_len = strlen(instruction);
 
         // curr_line now points to the start of the numeric data
-        curr_line += instruction_str_idx + 1;
+        curr_line += instruction_str_len + 1;
 
         if ((instruction[0] == 'v') & (instruction[1] == '\0')) {
             // Vertex
@@ -102,18 +86,19 @@ Obj import_obj (const char *filepath) {
             object.num_f++;
         }
 
-        iterate_lines_cleanup:
-            free(curr_fline_output.contents);
-            curr_fline_output = get_fline(fptr);
+        free(curr_fline_output.contents);
+        curr_fline_output = get_fline(fptr);
     }
+    free(curr_fline_output.contents);
 
-    if (import_obj_arena.free_fptr) fclose(import_obj_arena.fptr);
+    if (import_obj_arena.free_fptr) fclose(fptr);
     return object;
 
     error:
-        if (import_obj_arena.free_fptr) fclose(import_obj_arena.fptr);
-        Obj err_output = Obj_NULL;
-        return err_output;
+        if (import_obj_arena.free_fptr) fclose(fptr);
+        if (import_obj_arena.free_object) Obj_free(&object);
+        object = Obj_NULL;
+        return object;
 }
 
 
@@ -156,25 +141,43 @@ static struct fline_Output get_fline(FILE *stream) {
 }
 
 
-static struct Instruction_Counts get_instruction_counts (FILE *fptr) {
+void Obj_free (Obj *object) {
+    for (int face_idx = 0; face_idx < object->num_f; face_idx++) {
+        Face_free(&object->faces[face_idx]);
+    }
+
+    free(object->vertices);
+    free(object->vertex_textures);
+    free(object->vertex_normals);
+    free(object->faces);
+}
+
+
+void Face_free (Face *face) {
+    free(face->vertices);
+    free(face->vertex_textures);
+    free(face->vertex_normals);
+}
+
+
+static struct Instruction_Counts get_instruction_counts (const char *filepath) {
     struct Instruction_Counts output = {0, 0, 0, 0};
 
-    struct fline_Output curr_fline_output = get_fline(fptr);
-    while (!curr_fline_output.end_of_file) {
-        const char *curr_line = curr_fline_output.contents;
-        const int curr_line_len = strlen(curr_line);
+    FILE *fptr = fopen(filepath, "r");
+    if (fptr == NULL) {
+        printf("file obj.c, function get_instruction_counts():\n\tFailed to open file.\n");
+        output.num_v = -1; output.num_vt = -1; output.num_vn = -1; output.num_f = -1;
+        return output;
+    }
+
+    struct fline_Output fline_output = get_fline(fptr);
+    while (!fline_output.end_of_file) {
+        const char *line = fline_output.contents;
+        const int line_len = strlen(line);
 
         // instruction is normally a string like "v" or "vn" or "f"
-        const int instruction_str_len = curr_line_len;
-        char instruction[instruction_str_len];
-
-        for (int i = 0; i < instruction_str_len; i++) instruction[i] = '\0';
-
-        int instruction_str_idx = 0;
-        while ((curr_line[instruction_str_idx] != ' ') & (curr_line[instruction_str_idx] != '\0')) {
-            instruction[instruction_str_idx] = curr_line[instruction_str_idx];
-            instruction_str_idx++;
-        }
+        char instruction[line_len];
+        get_instruction_from_line(instruction, line, line_len);
 
         if ((instruction[0] == 'v') & (instruction[1] == '\0')) {
             output.num_v++;
@@ -186,11 +189,28 @@ static struct Instruction_Counts get_instruction_counts (FILE *fptr) {
             output.num_f++;
         }
 
-        free(curr_fline_output.contents);
-        curr_fline_output = get_fline(fptr);
+        free(fline_output.contents);
+        fline_output = get_fline(fptr);
     }
+    free(fline_output.contents);
 
     return output;
+}
+
+
+static void get_instruction_from_line (char *restrict out, const char *restrict line, const int line_len) {
+// Get a .obj file instruction from a string
+
+    // instruction is normally a string like "v" or "vn" or "f"
+    int i = 0;
+    while ((line[i] != ' ') & (line[i] != '\0')) {
+        out[i] = line[i];
+        i++;
+    }
+
+    for (int j = i; j < line_len; j++) {
+        out[j] = '\0';
+    }
 }
 
 

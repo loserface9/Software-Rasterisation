@@ -28,7 +28,7 @@ const double y_range = x_range / ((double) WIN_WIDTH / WIN_HEIGHT);
 
 
 void Triangle_to_str(char str[], struct Triangle *triangle);
-struct Triangle *Face_to_Triangles(const Face *face);
+struct Triangle *Face_to_Triangles(const Face *face, const int color);
 void transform_triangle(struct Triangle *triangle, const Mat3 *trans_mat);
 void transform_obj(Obj *object, const Mat3 *trans_mat);
 void organise_triangle(struct Triangle *triangle);
@@ -78,10 +78,13 @@ int main () {
         clear_buffers(buffer, z_buffer);
         transform_obj(&object, &rot_mat);
 
+        int color = 0;
+
         for (int face_idx = 0; face_idx < object.num_f; face_idx++) {
             const Face *face_ptr = &object.faces[face_idx];
             const int num_triangles = face_ptr->num_vertices - 2;
-            struct Triangle *triangles = Face_to_Triangles(face_ptr);
+            struct Triangle *triangles = Face_to_Triangles(face_ptr, color);
+            color++;
 
             for (int tri_idx = 0; tri_idx < num_triangles; tri_idx++) {
                 rasterise(buffer, z_buffer, &triangles[tri_idx], x_positions, y_positions);
@@ -297,7 +300,7 @@ void rasterise (
 }
 
 
-struct Triangle *Face_to_Triangles(const Face *face) {
+struct Triangle *Face_to_Triangles(const Face *face, const int color) {
     const int num_triangles = face->num_vertices - 2;
     struct Triangle *triangles = malloc(num_triangles * sizeof(struct Triangle));
 
@@ -308,7 +311,7 @@ struct Triangle *Face_to_Triangles(const Face *face) {
             t->B[dim] = (*(face->vertices[tri_idx+1]))[dim];
             t->C[dim] = (*(face->vertices[tri_idx+2]))[dim];
         }
-        t->color = 1;
+        t->color = (color % 7) + 1;
         organise_triangle(t);
     }
 

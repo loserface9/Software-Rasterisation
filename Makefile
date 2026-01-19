@@ -16,7 +16,7 @@ $(OBJ)/outRelease: $(OBJS)
 # Syntax - targets ...: target-pattern: prereq-patterns ...
 # In the case of the first target, foo.o, the target-pattern matches foo.o and sets the "stem" to be "foo".
 # It then replaces the '%' in prereq-patterns with that stem
-$(OBJS): $(OBJ)/%.o: %.c $(OBJ) $(SRC)/constants.h
+$(OBJS): $(OBJ)/%.o: %.c $(SRC)/constants.h
 	$(CC) -c $(CFLAGS) $(CLIBFLAGS) $< -o $@
 # ./obj/main.o: ./main.c
 # 	$(CC) -c $(CFLAGS) $(CLIBFLAGS) main.c -o ./obj/main.o
